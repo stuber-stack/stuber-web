@@ -154,7 +154,7 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       if (data.status === 'ACTIVE') {
         clearInterval(interval);
         const count = Array.isArray(data.passengers) ? data.passengers.length : 1;
-        if (data.fare) setPerPerson(data.fare / count + 0.5);
+        if (data.fare) setPerPerson(data.fare / (count + 1) + 0.5);
         setState('confirmed');
       } else if (data.status === 'CANCELLED') {
         clearInterval(interval);
