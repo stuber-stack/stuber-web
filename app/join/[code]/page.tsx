@@ -111,7 +111,7 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       options: { shouldCreateUser: true },
     });
 
-    if (error) { setError(error.message); return; }
+    if (error) { setError(error.message || 'Failed to send code — check your email address and try again.'); return; }
     setState('auth-otp');
   }
 
