@@ -121,6 +121,11 @@ export default function JoinPage({ params }: { params: { code: string } }) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session || !ride) { setError('Session expired. Please refresh.'); setState('join'); return; }
 
+    await supabase.from('users').upsert(
+      { id: session.user.id, email: email.trim().toLowerCase(), university: '' },
+      { onConflict: 'id' }
+    );
+
     const { error } = await supabase.from('passengers').insert({
       stuber_id: ride.id,
       user_id: session.user.id,
