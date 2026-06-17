@@ -106,10 +106,12 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
+    const { data, error } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: { shouldCreateUser: true },
     });
+
+    console.log('OTP response:', JSON.stringify({ data, error }));
 
     if (error) { setError(error.message || 'Failed to send code — check your email address and try again.'); return; }
     setState('auth-otp');
