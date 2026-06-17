@@ -12,6 +12,7 @@ type PageState =
   | 'join'
   | 'joining'
   | 'waiting'
+  | 'fare-preview'
   | 'confirmed'
   | 'cancelled';
 
@@ -159,6 +160,10 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       } else if (data.status === 'CANCELLED') {
         clearInterval(interval);
         setState('cancelled');
+      } else if (data.status === 'OPEN' && data.fare) {
+        const count = Array.isArray(data.passengers) ? data.passengers.length : 1;
+        setPerPerson(data.fare / (count + 1) * 1.10);
+        setState('fare-preview');
       }
     }, 3000);
   }
@@ -222,6 +227,27 @@ export default function JoinPage({ params }: { params: { code: string } }) {
           </div>
         )}
         <p className="text-gray-500 text-sm text-center">Your fare has been confirmed. Enjoy the ride!</p>
+      </Screen>
+    );
+  }
+
+  if (state === 'fare-preview') {
+    return (
+      <Screen>
+        <p className="text-4xl mb-4">⚠️</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1 text-center">Your host is about to charge</h1>
+        <p className="text-indigo-600 font-semibold text-lg mb-6 text-center">{ride?.destination}</p>
+        {perPerson != null && (
+          <div className="bg-amber-50 rounded-2xl px-10 py-6 text-center mb-6 w-full">
+            <p className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-1">Your share</p>
+            <p className="text-5xl font-extrabold text-amber-700">£{perPerson.toFixed(2)}</p>
+            <p className="text-amber-600 text-sm mt-2">includes 10% Stuber fee</p>
+          </div>
+        )}
+        <div className="flex items-center gap-2 bg-orange-50 rounded-full px-4 py-2">
+          <Spinner small />
+          <span className="text-sm font-semibold text-orange-700">Waiting for host to confirm…</span>
+        </div>
       </Screen>
     );
   }
