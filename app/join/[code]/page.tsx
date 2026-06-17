@@ -9,7 +9,6 @@ type PageState =
   | 'closed'
   | 'full'
   | 'auth-email'
-  | 'auth-otp'
   | 'join'
   | 'joining'
   | 'waiting'
@@ -33,7 +32,6 @@ export default function JoinPage({ params }: { params: { code: string } }) {
   const [state, setState] = useState<PageState>('loading');
   const [ride, setRide] = useState<Ride | null>(null);
   const [email, setEmail] = useState('');
-  const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [perPerson, setPerPerson] = useState<number | null>(null);
@@ -43,14 +41,12 @@ export default function JoinPage({ params }: { params: { code: string } }) {
   }, []);
 
   async function init() {
-    // Check for existing session first
     const { data: { session } } = await supabase.auth.getSession();
 
     const rideData = await fetchRide();
     if (!rideData) return;
 
     if (session) {
-      // Already verified — check if already in this ride
       const { data: existing } = await supabase
         .from('passengers')
         .select('id, status')
@@ -97,7 +93,7 @@ export default function JoinPage({ params }: { params: { code: string } }) {
     return rideData;
   }
 
-  async function handleSendOtp() {
+  async function handleVerifyEmail() {
     setError('');
     const trimmed = email.trim().toLowerCase();
 
@@ -106,26 +102,12 @@ export default function JoinPage({ params }: { params: { code: string } }) {
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithOtp({
-      email: trimmed,
-      options: { shouldCreateUser: true },
-    });
+    const { error: signInError } = await supabase.auth.signInAnonymously();
+    if (signInError) {
+      setError('Could not start session — please refresh and try again.');
+      return;
+    }
 
-    console.log('OTP response:', JSON.stringify({ data, error }));
-
-    if (error) { setError(error.message || 'Failed to send code — check your email address and try again.'); return; }
-    setState('auth-otp');
-  }
-
-  async function handleVerifyOtp() {
-    setError('');
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token: otp.trim(),
-      type: 'email',
-    });
-
-    if (error) { setError('Invalid code — check your email and try again.'); return; }
     setState('join');
   }
 
@@ -139,18 +121,12 @@ export default function JoinPage({ params }: { params: { code: string } }) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session || !ride) { setError('Session expired. Please refresh.'); setState('join'); return; }
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('email, university')
-      .eq('id', session.user.id)
-      .single();
-
     const { error } = await supabase.from('passengers').insert({
       stuber_id: ride.id,
       user_id: session.user.id,
       name: trimmedName,
-      email: userData?.email ?? session.user.email ?? '',
-      university: userData?.university ?? '',
+      email: email.trim().toLowerCase(),
+      university: '',
       status: 'AUTHORISED',
     });
 
@@ -268,7 +244,7 @@ export default function JoinPage({ params }: { params: { code: string } }) {
         <Logo />
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Join the ride</h1>
         <p className="text-gray-500 text-sm mb-6 text-center">
-          Verify your university email to continue
+          Enter your university email to continue
         </p>
         {ride && <RideChip ride={ride} />}
         <div className="w-full mt-6">
@@ -281,53 +257,15 @@ export default function JoinPage({ params }: { params: { code: string } }) {
             placeholder="you@university.ac.uk"
             value={email}
             onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSendOtp()}
+            onKeyDown={e => e.key === 'Enter' && handleVerifyEmail()}
             autoFocus
           />
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
           <button
-            onClick={handleSendOtp}
+            onClick={handleVerifyEmail}
             className="w-full mt-4 bg-indigo-600 text-white font-bold rounded-xl py-4 text-base active:opacity-80"
           >
-            Send verification code
-          </button>
-        </div>
-      </Screen>
-    );
-  }
-
-  if (state === 'auth-otp') {
-    return (
-      <Screen>
-        <Logo />
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Check your email</h1>
-        <p className="text-gray-500 text-sm mb-6 text-center">
-          We sent a 6-digit code to <span className="font-semibold text-gray-700">{email}</span>
-        </p>
-        <div className="w-full">
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            className="w-full border-2 border-gray-200 rounded-xl px-4 py-4 text-3xl font-bold text-indigo-600 tracking-widest text-center focus:outline-none focus:border-indigo-500"
-            placeholder="000000"
-            value={otp}
-            onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-            autoFocus
-          />
-          {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
-          <button
-            onClick={handleVerifyOtp}
-            disabled={otp.length !== 6}
-            className="w-full mt-4 bg-indigo-600 text-white font-bold rounded-xl py-4 text-base disabled:opacity-40 active:opacity-80"
-          >
-            Verify
-          </button>
-          <button
-            onClick={() => { setState('auth-email'); setOtp(''); setError(''); }}
-            className="w-full mt-3 text-gray-400 text-sm py-2"
-          >
-            Wrong email? Go back
+            Continue
           </button>
         </div>
       </Screen>
