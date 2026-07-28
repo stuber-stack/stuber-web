@@ -18,8 +18,16 @@ export default function ResetPasswordPage() {
   }, []);
 
   async function init() {
-    // Supabase's browser client parses the recovery token out of the URL
-    // hash automatically and turns it into a session.
+    // Supabase's browser client parses an implicit-flow token (#access_token=...)
+    // out of the URL hash automatically. PKCE-flow links instead carry a
+    // ?code=... query param that must be exchanged for a session explicitly.
+    const code = new URLSearchParams(window.location.search).get('code');
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      setState(error ? 'invalid' : 'form');
+      return;
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     setState(session ? 'form' : 'invalid');
   }
