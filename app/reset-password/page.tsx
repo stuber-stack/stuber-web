@@ -8,43 +8,25 @@ type PageState = 'checking' | 'invalid' | 'form' | 'saving' | 'done';
 export default function ResetPasswordPage() {
   const supabase = createClient();
 
+  const [tokenHash, setTokenHash] = useState<string | null>(null);
   const [state, setState] = useState<PageState>('checking');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // PASSWORD_RECOVERY fires once Supabase's client has parsed whatever the
-    // /verify redirect handed us — a #access_token hash (implicit flow) or a
-    // ?code= query param (PKCE) — regardless of which shape it took.
-    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setState('form');
-    });
-
-    init();
-
-    return () => listener.subscription.unsubscribe();
+    // Read straight from the URL, client-side only — no auto-verify call here.
+    // Verifying only happens on submit, so an email scanner prefetching this
+    // page (a plain GET, no form interaction) can't burn the single-use token.
+    const hash = new URLSearchParams(window.location.search).get('token_hash');
+    setTokenHash(hash);
+    setState(hash ? 'form' : 'invalid');
   }, []);
-
-  async function init() {
-    const code = new URLSearchParams(window.location.search).get('code');
-    if (code) {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      if (!error) { setState('form'); return; }
-    }
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) { setState('form'); return; }
-
-    // Give onAuthStateChange a moment to fire before giving up.
-    setTimeout(async () => {
-      const { data: { session: retrySession } } = await supabase.auth.getSession();
-      setState((prev) => (prev === 'form' ? prev : retrySession ? 'form' : 'invalid'));
-    }, 1500);
-  }
 
   async function handleSubmit() {
     setError('');
+
+    if (!tokenHash) return;
 
     if (password.length < 6) {
       setError('Password must be at least 6 characters.');
@@ -56,6 +38,18 @@ export default function ResetPasswordPage() {
     }
 
     setState('saving');
+
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'recovery',
+    });
+
+    if (verifyError) {
+      setError('This link has expired or already been used. Go back to the app and request a new one.');
+      setState('invalid');
+      return;
+    }
+
     const { error: updateError } = await supabase.auth.updateUser({ password });
 
     if (updateError) {
@@ -81,7 +75,7 @@ export default function ResetPasswordPage() {
         <p className="text-4xl mb-4">⚠️</p>
         <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">Link expired</h1>
         <p className="text-gray-500 text-sm text-center">
-          This password reset link is invalid or has expired. Go back to the app and request a new one.
+          {error || 'This password reset link is invalid or has expired. Go back to the app and request a new one.'}
         </p>
       </Screen>
     );
