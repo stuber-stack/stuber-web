@@ -14,22 +14,33 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // PASSWORD_RECOVERY fires once Supabase's client has parsed whatever the
+    // /verify redirect handed us — a #access_token hash (implicit flow) or a
+    // ?code= query param (PKCE) — regardless of which shape it took.
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setState('form');
+    });
+
     init();
+
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   async function init() {
-    // Supabase's browser client parses an implicit-flow token (#access_token=...)
-    // out of the URL hash automatically. PKCE-flow links instead carry a
-    // ?code=... query param that must be exchanged for a session explicitly.
     const code = new URLSearchParams(window.location.search).get('code');
     if (code) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
-      setState(error ? 'invalid' : 'form');
-      return;
+      if (!error) { setState('form'); return; }
     }
 
     const { data: { session } } = await supabase.auth.getSession();
-    setState(session ? 'form' : 'invalid');
+    if (session) { setState('form'); return; }
+
+    // Give onAuthStateChange a moment to fire before giving up.
+    setTimeout(async () => {
+      const { data: { session: retrySession } } = await supabase.auth.getSession();
+      setState((prev) => (prev === 'form' ? prev : retrySession ? 'form' : 'invalid'));
+    }, 1500);
   }
 
   async function handleSubmit() {
